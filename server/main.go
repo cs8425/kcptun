@@ -18,7 +18,7 @@ import (
 	"github.com/golang/snappy"
 	"github.com/urfave/cli"
 	kcp "github.com/xtaci/kcp-go"
-	"github.com/xtaci/smux"
+	"../smux"
 )
 
 var (
@@ -62,6 +62,9 @@ func handleMux(conn io.ReadWriteCloser, config *Config) {
 	smuxConfig := smux.DefaultConfig()
 	smuxConfig.MaxReceiveBuffer = config.SockBuf
 	smuxConfig.KeepAliveInterval = time.Duration(config.KeepAlive) * time.Second
+	smuxConfig.EnableStreamBuffer = config.StreamBufEn
+	smuxConfig.MaxStreamBuffer = config.StreamBuf
+	smuxConfig.BoostTimeout = time.Duration(config.StreamBoost) * time.Millisecond
 
 	mux, err := smux.Server(conn, smuxConfig)
 	if err != nil {
@@ -213,6 +216,20 @@ func main() {
 			Value:  4194304, // socket buffer size in bytes
 			Hidden: true,
 		},
+		cli.BoolFlag{
+			Name:   "streambuf-en", // enable stream buffer control
+			Hidden: true,
+		},
+		cli.IntFlag{
+			Name:   "streambuf",
+			Value:  1048576, // each stream buffer max size in bytes
+			Hidden: true,
+		},
+		cli.IntFlag{
+			Name:   "streamboost",
+			Value:  10000, // stream boost for startup in ms
+			Hidden: true,
+		},
 		cli.IntFlag{
 			Name:   "keepalive",
 			Value:  10, // nat keepalive interval in seconds
@@ -263,6 +280,9 @@ func main() {
 		config.Resend = c.Int("resend")
 		config.NoCongestion = c.Int("nc")
 		config.SockBuf = c.Int("sockbuf")
+		config.StreamBufEn = c.Bool("streambuf-en")
+		config.StreamBuf = c.Int("streambuf")
+		config.StreamBoost = c.Int("streamboost")
 		config.KeepAlive = c.Int("keepalive")
 		config.Log = c.String("log")
 		config.SnmpLog = c.String("snmplog")
@@ -338,6 +358,9 @@ func main() {
 		log.Println("acknodelay:", config.AckNodelay)
 		log.Println("dscp:", config.DSCP)
 		log.Println("sockbuf:", config.SockBuf)
+		log.Println("streambuf-en:", config.StreamBufEn)
+		log.Println("streambuf:", config.StreamBuf)
+		log.Println("streamboost:", config.StreamBoost)
 		log.Println("keepalive:", config.KeepAlive)
 		log.Println("snmplog:", config.SnmpLog)
 		log.Println("snmpperiod:", config.SnmpPeriod)

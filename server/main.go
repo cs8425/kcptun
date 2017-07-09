@@ -12,6 +12,8 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"time"
+	"sync"
+	"strconv"
 
 	"golang.org/x/crypto/pbkdf2"
 
@@ -27,6 +29,12 @@ var (
 	// SALT is use for pbkdf2 key expansion
 	SALT = "kcp-go"
 )
+
+var verbosity int = 2
+//var std = log.New(os.Stderr, "", log.LstdFlags)
+
+// global recycle buffer
+var copyBuf sync.Pool
 
 type compStream struct {
 	conn net.Conn
@@ -78,28 +86,115 @@ func handleMux(conn io.ReadWriteCloser, config *Config) {
 			log.Println(err)
 			return
 		}
-		p2, err := net.DialTimeout("tcp", config.Target, 5*time.Second)
-		if err != nil {
-			p1.Close()
-			log.Println(err)
-			continue
-		}
-		go handleClient(p1, p2)
+
+		go handleClient(p1, config)
 	}
 }
 
-func handleClient(p1, p2 io.ReadWriteCloser) {
-	log.Println("stream opened")
-	defer log.Println("stream closed")
+func handleClient(p1 net.Conn, config *Config) {
 	defer p1.Close()
+
+	switch config.Type {
+	case "raw":
+		p2, err := net.DialTimeout("tcp", config.Target, 10*time.Second)
+		if err != nil {
+			Vln(2, "[connect err]", config.Target, err)
+			return
+		}
+		defer p2.Close()
+		cp(p1, p2)
+
+	default:
+		fallthrough
+	case "fast":
+		handleFast(p1, config)
+	}
+
+}
+
+func replyAndClose(p1 net.Conn, rpy int) {
+	p1.Write([]byte{0x05, byte(rpy), 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+	p1.Close()
+}
+
+func handleFast(p1 net.Conn, config *Config) {
+	var b [320]byte
+	n, err := p1.Read(b[:])
+	if err != nil {
+		Vln(3, "[fast client read]", p1, err)
+		return
+	}
+	// b[0:2] // ignore
+
+	var host, port, backend string
+	switch b[3] {
+	case 0x01: //IP V4
+		host = net.IPv4(b[4], b[5], b[6], b[7]).String()
+	case 0x03: //DOMAINNAME
+		host = string(b[5 : n-2]) //b[4] domain name length
+	case 0x04: //IP V6
+		host = net.IP{b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15], b[16], b[17], b[18], b[19]}.String()
+	case 0x05: //DOMAINNAME + PORT
+		backend = string(b[4 : n])
+		goto CONN
+	default:
+		replyAndClose(p1, 0x08) // X'08' Address type not supported
+		return
+	}
+	port = strconv.Itoa(int(b[n-2])<<8 | int(b[n-1]))
+	backend = net.JoinHostPort(host, port)
+
+CONN:
+	p2, err := net.DialTimeout("tcp", backend, 10*time.Second)
+	if err != nil {
+		Vln(2, "[err]", backend, err)
+
+		switch t := err.(type) {
+		case *net.AddrError:
+			replyAndClose(p1, 0x03) // X'03' Network unreachable
+
+		case *net.OpError:
+			if t.Timeout() {
+				replyAndClose(p1, 0x06) // X'06' TTL expired
+			} else if t.Op == "dial" {
+				replyAndClose(p1, 0x05) // X'05' Connection refused
+			}
+
+		default:
+			//replyAndClose(p1, 0x03) // X'03' Network unreachable
+			//replyAndClose(p1, 0x04) // X'04' Host unreachable
+			replyAndClose(p1, 0x05) // X'05' Connection refused
+			//replyAndClose(p1, 0x06) // X'06' TTL expired
+		}
+		return
+	}
 	defer p2.Close()
 
+	Vln(3, "[got]", backend)
+	reply := []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+	p1.Write(reply) // reply OK
+
+	cp(p1, p2)
+	Vln(3, "[cls]", backend)
+}
+
+func cp(p1, p2 io.ReadWriteCloser) {
 	// start tunnel
 	p1die := make(chan struct{})
-	go func() { io.Copy(p1, p2); close(p1die) }()
+	go func() {
+		buf := copyBuf.Get().([]byte)
+		io.CopyBuffer(p1, p2, buf)
+		close(p1die)
+		copyBuf.Put(buf)
+	}()
 
 	p2die := make(chan struct{})
-	go func() { io.Copy(p2, p1); close(p2die) }()
+	go func() {
+		buf := copyBuf.Get().([]byte)
+		io.CopyBuffer(p2, p1, buf)
+		close(p2die)
+		copyBuf.Put(buf)
+	}()
 
 	// wait for tunnel termination
 	select {
@@ -151,6 +246,11 @@ func main() {
 			Name:  "mode",
 			Value: "fast",
 			Usage: "profiles: fast3, fast2, fast, normal, manual",
+		},
+		cli.StringFlag{
+			Name:  "type",
+			Value: "fast",
+			Usage: "profiles: fast, raw",
 		},
 		cli.IntFlag{
 			Name:  "mtu",
@@ -259,6 +359,11 @@ func main() {
 			Value: "", // when the value is not empty, the config path must exists
 			Usage: "config from json file, which will override the command from shell",
 		},
+		cli.IntFlag{
+			Name:  "verb",
+			Value: 2,
+			Usage: "log verbosity",
+		},
 	}
 	myApp.Action = func(c *cli.Context) error {
 		config := Config{}
@@ -267,6 +372,7 @@ func main() {
 		config.Key = c.String("key")
 		config.Crypt = c.String("crypt")
 		config.Mode = c.String("mode")
+		config.Type = c.String("type")
 		config.MTU = c.Int("mtu")
 		config.SndWnd = c.Int("sndwnd")
 		config.RcvWnd = c.Int("rcvwnd")
@@ -288,6 +394,7 @@ func main() {
 		config.SnmpLog = c.String("snmplog")
 		config.SnmpPeriod = c.Int("snmpperiod")
 		config.Pprof = c.Bool("pprof")
+		config.Verb = c.Int("verb")
 
 		if c.String("c") != "" {
 			//Now only support json config file
@@ -344,6 +451,7 @@ func main() {
 			config.Crypt = "aes"
 			block, _ = kcp.NewAESBlockCrypt(pass)
 		}
+		verbosity = config.Verb
 
 		lis, err := kcp.ListenWithOptions(config.Listen, block, config.DataShard, config.ParityShard)
 		checkError(err)
@@ -365,6 +473,8 @@ func main() {
 		log.Println("snmplog:", config.SnmpLog)
 		log.Println("snmpperiod:", config.SnmpPeriod)
 		log.Println("pprof:", config.Pprof)
+		log.Println("type:", config.Type)
+		log.Println("verbosity:", config.Verb)
 
 		if err := lis.SetDSCP(config.DSCP); err != nil {
 			log.Println("SetDSCP:", err)
@@ -374,6 +484,10 @@ func main() {
 		}
 		if err := lis.SetWriteBuffer(config.SockBuf); err != nil {
 			log.Println("SetWriteBuffer:", err)
+		}
+
+		copyBuf.New = func() interface{} {
+			return make([]byte, 4096)
 		}
 
 		go snmpLogger(config.SnmpLog, config.SnmpPeriod)
@@ -434,3 +548,11 @@ func snmpLogger(path string, interval int) {
 		}
 	}
 }
+
+func Vln(level int, v ...interface{}) {
+	if level <= verbosity {
+//		std.Println(v...)
+		log.Println(v...)
+	}
+}
+

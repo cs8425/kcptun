@@ -12,6 +12,7 @@ type Config struct {
 	Key          string `json:"key"`
 	Crypt        string `json:"crypt"`
 	Mode         string `json:"mode"`
+	Type         string `json:"type"`
 	MTU          int    `json:"mtu"`
 	SndWnd       int    `json:"sndwnd"`
 	RcvWnd       int    `json:"rcvwnd"`
@@ -33,6 +34,7 @@ type Config struct {
 	SnmpLog      string `json:"snmplog"`
 	SnmpPeriod   int    `json:"snmpperiod"`
 	Pprof        bool   `json:"pprof"`
+	Verb         int    `json:"verb"`
 }
 
 func parseJSONConfig(config *Config, path string) error {

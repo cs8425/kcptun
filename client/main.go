@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"time"
+	"sync"
 
 	"golang.org/x/crypto/pbkdf2"
 
@@ -26,6 +27,11 @@ var (
 	// SALT is use for pbkdf2 key expansion
 	SALT = "kcp-go"
 )
+
+var verbosity int = 2
+
+// global recycle buffer
+var copyBuf sync.Pool
 
 type compStream struct {
 	conn net.Conn
@@ -55,22 +61,184 @@ func newCompStream(conn net.Conn) *compStream {
 	return c
 }
 
-func handleClient(sess *smux.Session, p1 io.ReadWriteCloser) {
-	log.Println("stream opened")
-	defer log.Println("stream closed")
-	defer p1.Close()
+func replyAndClose(p1 net.Conn, rpy int) {
+	p1.Write([]byte{0x05, byte(rpy), 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+	p1.Close()
+}
+
+// thanks: http://www.golangnote.com/topic/141.html
+func handleSocks(p1 net.Conn, sess *smux.Session) {
+	var b [320]byte
+	n, err := p1.Read(b[:])
+	if err != nil {
+		Vln(3, "socks client read", p1, err)
+		return
+	}
+	if b[0] != 0x05 { //only Socket5
+		return
+	}
+
+	//reply: NO AUTHENTICATION REQUIRED
+	p1.Write([]byte{0x05, 0x00})
+
+	n, err = p1.Read(b[:])
+	if b[1] != 0x01 { // 0x01: CONNECT
+		replyAndClose(p1, 0x07) // X'07' Command not supported
+		return
+	}
+
+	var backend string
+	switch b[3] {
+	case 0x01: //IP V4
+		backend = net.IPv4(b[4], b[5], b[6], b[7]).String()
+		if n != 10 {
+			replyAndClose(p1, 0x07) // X'07' Command not supported
+			return
+		}
+	case 0x03: //DOMAINNAME
+		backend = string(b[5 : n-2]) //b[4] domain name length
+	case 0x04: //IP V6
+		backend = net.IP{b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15], b[16], b[17], b[18], b[19]}.String()
+		if n != 22 {
+			replyAndClose(p1, 0x07) // X'07' Command not supported
+			return
+		}
+	default:
+		replyAndClose(p1, 0x08) // X'08' Address type not supported
+		return
+	}
+
+	p2, err := sess.OpenStream()
+	if err != nil {
+		return
+	}
+	defer p2.Close()
+	// send to proxy
+	p2.Write(b[0:n])
+
+	var b2 [10]byte
+	n2, err := p2.Read(b2[:10])
+	if n2 < 10 {
+		Vln(2, "Dial err replay:", backend, n2)
+		replyAndClose(p1, 0x03)
+		return
+	}
+	if err != nil || b2[1] != 0x00 {
+		Vln(2, "socks err to:", backend, n2, b2[1], err)
+		replyAndClose(p1, int(b2[1]))
+		return
+	}
+
+	Vln(3, "socks to:", backend)
+	reply := []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+	p1.Write(reply) // reply OK
+	cp(p1, p2)
+}
+
+/*// thanks: http://www.golangnote.com/topic/141.html
+func handleHttp(client net.Conn, sess *smux.Session) {
+	var b [1024]byte
+	n, err := client.Read(b[:])
+	if err != nil {
+		Vln(3, "http client read err", client, err)
+		return
+	}
+	var method, host, address string
+	idx := bytes.IndexByte(b[:], '\n')
+	if idx == -1 {
+		Vln(3, "http client parse err", idx, client.RemoteAddr())
+		return
+	}
+	fmt.Sscanf(string(b[:idx]), "%s%s", &method, &host)
+
+	if strings.Index(host, "://") == -1 {
+		host = "//" + host
+	}
+	hostPortURL, err := url.Parse(host)
+	if err != nil {
+		Vln(3, "Parse hostPortURL err:", client, hostPortURL, err)
+		return
+	}
+	if strings.Index(hostPortURL.Host, ":") == -1 { // no port, default 80
+		address = hostPortURL.Host + ":80"
+	} else {
+		address = hostPortURL.Host
+	}
+
+
 	p2, err := sess.OpenStream()
 	if err != nil {
 		return
 	}
 	defer p2.Close()
 
+	Vln(3, "Dial to:", method, address)
+	var target = append([]byte{0, 0, 0, 0x05}, []byte(address)...)
+	p2.Write(target)
+
+	var b2 [10]byte
+	n2, err := p2.Read(b2[:10])
+	if n2 < 10 {
+		Vln(2, "Dial err replay:", address, n2)
+		return
+	}
+	if err != nil || b2[1] != 0x00 {
+		Vln(2, "Dial err:", address, n2, b2[1], err)
+		return
+	}
+
+	if method == "CONNECT" {
+		client.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
+	} else {
+		p2.Write(b[:n])
+	}
+
+	cp(client, p2)
+}*/
+
+func handleClient(sess *smux.Session, p1 net.Conn, config *Config) {
+	defer p1.Close()
+
+//	Vln(3, "new client:", config.Type, p1.RemoteAddr(), p2.LocalAddr(), p2.RemoteAddr())
+
+	switch config.Type {
+	case "socks":
+		//Vln(2, "socksv5")
+		handleSocks(p1, sess)
+
+//	case "http":
+		//Vln(2, "http-proxy")
+//		handleHttp(p1, sess)
+
+	default:
+		p2, err := sess.OpenStream()
+		if err != nil {
+			return
+		}
+		defer p2.Close()
+		cp(p1, p2)
+	}
+
+}
+
+func cp(p1, p2 io.ReadWriteCloser) {
+
 	// start tunnel
 	p1die := make(chan struct{})
-	go func() { io.Copy(p1, p2); close(p1die) }()
+	go func() {
+		buf := copyBuf.Get().([]byte)
+		io.CopyBuffer(p1, p2, buf)
+		close(p1die)
+		copyBuf.Put(buf)
+	}()
 
 	p2die := make(chan struct{})
-	go func() { io.Copy(p2, p1); close(p2die) }()
+	go func() {
+		buf := copyBuf.Get().([]byte)
+		io.CopyBuffer(p2, p1, buf)
+		close(p2die)
+		copyBuf.Put(buf)
+	}()
 
 	// wait for tunnel termination
 	select {
@@ -122,6 +290,11 @@ func main() {
 			Name:  "mode",
 			Value: "fast",
 			Usage: "profiles: fast3, fast2, fast, normal, manual",
+		},
+		cli.StringFlag{
+			Name:  "type",
+			Value: "socks",
+			Usage: "profiles: socks, http, raw",
 		},
 		cli.IntFlag{
 			Name:  "conn",
@@ -241,6 +414,11 @@ func main() {
 			Value: "", // when the value is not empty, the config path must exists
 			Usage: "config from json file, which will override the command from shell",
 		},
+		cli.IntFlag{
+			Name:  "verb",
+			Value: 2,
+			Usage: "log verbosity",
+		},
 	}
 	myApp.Action = func(c *cli.Context) error {
 		config := Config{}
@@ -249,6 +427,7 @@ func main() {
 		config.Key = c.String("key")
 		config.Crypt = c.String("crypt")
 		config.Mode = c.String("mode")
+		config.Type = c.String("type")
 		config.Conn = c.Int("conn")
 		config.AutoExpire = c.Int("autoexpire")
 		config.ScavengeTTL = c.Int("scavengettl")
@@ -272,6 +451,7 @@ func main() {
 		config.Log = c.String("log")
 		config.SnmpLog = c.String("snmplog")
 		config.SnmpPeriod = c.Int("snmpperiod")
+		config.Verb = c.Int("verb")
 
 		if c.String("c") != "" {
 			err := parseJSONConfig(&config, c.String("c"))
@@ -332,6 +512,7 @@ func main() {
 			config.Crypt = "aes"
 			block, _ = kcp.NewAESBlockCrypt(pass)
 		}
+		verbosity = config.Verb
 
 		log.Println("listening on:", listener.Addr())
 		log.Println("encryption:", config.Crypt)
@@ -353,6 +534,12 @@ func main() {
 		log.Println("scavengettl:", config.ScavengeTTL)
 		log.Println("snmplog:", config.SnmpLog)
 		log.Println("snmpperiod:", config.SnmpPeriod)
+		log.Println("type:", config.Type)
+		log.Println("verbosity:", config.Verb)
+
+		copyBuf.New = func() interface{} {
+			return make([]byte, 4096)
+		}
 
 		smuxConfig := smux.DefaultConfig()
 		smuxConfig.MaxReceiveBuffer = config.SockBuf
@@ -439,7 +626,7 @@ func main() {
 				muxes[idx].ttl = time.Now().Add(time.Duration(config.AutoExpire) * time.Second)
 			}
 
-			go handleClient(muxes[idx].session, p1)
+			go handleClient(muxes[idx].session, p1, &config)
 			rr++
 		}
 	}
@@ -509,3 +696,10 @@ func snmpLogger(path string, interval int) {
 		}
 	}
 }
+
+func Vln(level int, v ...interface{}) {
+	if level <= verbosity {
+		log.Println(v...)
+	}
+}
+

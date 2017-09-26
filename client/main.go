@@ -15,9 +15,9 @@ import (
 	"golang.org/x/crypto/pbkdf2"
 
 	"github.com/golang/snappy"
-	"github.com/pkg/errors"
+//	"github.com/pkg/errors"
 	"github.com/urfave/cli"
-	kcp "github.com/xtaci/kcp-go"
+	kcp "../kcp-go"
 	"../smux"
 )
 
@@ -135,67 +135,6 @@ func handleSocks(p1 net.Conn, sess *smux.Session) {
 	cp(p1, p2)
 }
 
-/*// thanks: http://www.golangnote.com/topic/141.html
-func handleHttp(client net.Conn, sess *smux.Session) {
-	var b [1024]byte
-	n, err := client.Read(b[:])
-	if err != nil {
-		Vln(3, "http client read err", client, err)
-		return
-	}
-	var method, host, address string
-	idx := bytes.IndexByte(b[:], '\n')
-	if idx == -1 {
-		Vln(3, "http client parse err", idx, client.RemoteAddr())
-		return
-	}
-	fmt.Sscanf(string(b[:idx]), "%s%s", &method, &host)
-
-	if strings.Index(host, "://") == -1 {
-		host = "//" + host
-	}
-	hostPortURL, err := url.Parse(host)
-	if err != nil {
-		Vln(3, "Parse hostPortURL err:", client, hostPortURL, err)
-		return
-	}
-	if strings.Index(hostPortURL.Host, ":") == -1 { // no port, default 80
-		address = hostPortURL.Host + ":80"
-	} else {
-		address = hostPortURL.Host
-	}
-
-
-	p2, err := sess.OpenStream()
-	if err != nil {
-		return
-	}
-	defer p2.Close()
-
-	Vln(3, "Dial to:", method, address)
-	var target = append([]byte{0, 0, 0, 0x05}, []byte(address)...)
-	p2.Write(target)
-
-	var b2 [10]byte
-	n2, err := p2.Read(b2[:10])
-	if n2 < 10 {
-		Vln(2, "Dial err replay:", address, n2)
-		return
-	}
-	if err != nil || b2[1] != 0x00 {
-		Vln(2, "Dial err:", address, n2, b2[1], err)
-		return
-	}
-
-	if method == "CONNECT" {
-		client.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
-	} else {
-		p2.Write(b[:n])
-	}
-
-	cp(client, p2)
-}*/
-
 func handleClient(sess *smux.Session, p1 net.Conn, config *Config) {
 	defer p1.Close()
 
@@ -205,10 +144,6 @@ func handleClient(sess *smux.Session, p1 net.Conn, config *Config) {
 	case "socks":
 		//Vln(2, "socksv5")
 		handleSocks(p1, sess)
-
-//	case "http":
-		//Vln(2, "http-proxy")
-//		handleHttp(p1, sess)
 
 	default:
 		p2, err := sess.OpenStream()
@@ -551,7 +486,7 @@ func main() {
 		createConn := func() (*smux.Session, error) {
 			kcpconn, err := kcp.DialWithOptions(config.RemoteAddr, block, config.DataShard, config.ParityShard)
 			if err != nil {
-				return nil, errors.Wrap(err, "createConn()")
+				return nil, err //errors.Wrap(err, "createConn()")
 			}
 			kcpconn.SetStreamMode(true)
 			kcpconn.SetWriteDelay(true)
@@ -578,7 +513,7 @@ func main() {
 				session, err = smux.Client(newCompStream(kcpconn), smuxConfig)
 			}
 			if err != nil {
-				return nil, errors.Wrap(err, "createConn()")
+				return nil, err //errors.Wrap(err, "createConn()")
 			}
 			log.Println("connection:", kcpconn.LocalAddr(), "->", kcpconn.RemoteAddr())
 			return session, nil

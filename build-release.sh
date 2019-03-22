@@ -11,6 +11,14 @@ if ! hash sha1sum 2>/dev/null; then
 	sum="shasum"
 fi
 
+sum256="sha256sum"
+if ! hash sha256sum 2>/dev/null; then
+	echo "I can't see 'sha256sum'"
+	echo "Please install one of them!"
+	exit
+fi
+
+
 UPX=false
 if hash upx 2>/dev/null; then
 	UPX=true
@@ -20,6 +28,8 @@ VERSION=`git describe --tags`
 LDFLAGS="-X main.VERSION=$VERSION -s -w"
 GCFLAGS=""
 OUT="build"
+OUTSHA1="SHA1SUMS"
+OUTSHA256="SHA256SUMS"
 
 startgo() {
 NAME=$1
@@ -85,6 +95,9 @@ rungo() {
 }
 
 
+echo "" > $OUT/$OUTSHA1
+echo "" > $OUT/$OUTSHA256
+
 ARCHS=(amd64 386 darwin-amd64 darwin-386 windows-386 windows-amd64 freebsd-amd64 freebsd-386 arm8 arm7 arm6 arm5 mipsle mips)
 for v in ${ARCHS[@]}; do
 	suffix=""
@@ -111,7 +124,8 @@ for v in ${ARCHS[@]}; do
 	pushd $OUT
 	if $UPX; then upx -9 client_${os}_${arch}${suffix} server_${os}_${arch}${suffix};fi
 	tar -zcf kcptun-${os}-${arch}-$VERSION.tar.gz client_${os}_${arch}${suffix} server_${os}_${arch}${suffix}
-	$sum kcptun-${os}-${arch}-$VERSION.tar.gz
+	$sum kcptun-${os}-${arch}-$VERSION.tar.gz >> $OUTSHA1
+	$sum256 kcptun-${os}-${arch}-$VERSION.tar.gz >> $OUTSHA256
 	popd
 done
 

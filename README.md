@@ -5,6 +5,45 @@ kcptunB, **B** is for Breaking fixes/features.
 The different between original is that kcptunB **include the fixes and features that could NEVER be solved without breaking changes!!**
 And add some features that may never be merge.
 
+#### Usage of built-in proxy
+
+* server side, `-ser` values:
+  * `raw`: only connect to `--target` (default)
+  * `fast`: can connect to anyway client want, but client side MUST set with `socks5` or `http`
+
+* client side, `-ser` values:
+  * `raw`: only connect to server side's `--target` (default)
+  * `socks5`: can connect to anyway via socks5 protocol, but server side MUST set with `fast`
+  * `http`: can connect to anyway via http proxy, but server side MUST set with `fast`
+
+##### example
+
+1. Application can use socks5 proxy
+
+```
+# Server command:
+./server_linux_amd64 -t "TARGET_IP:8388" -l ":4000" -ser fast
+
+# Client command:
+./client_darwin_amd64 -r "KCP_SERVER_IP:4000" -l ":8388" -ser socks5
+
+# Application:
+curl -v -x "socks5://127.0.0.1:8388" http://google.com
+```
+
+2. Application can use http proxy
+
+```
+# Server command:
+./server_linux_amd64 -t "TARGET_IP:8388" -l ":4000" -ser fast
+
+# Client command:
+./client_darwin_amd64 -r "KCP_SERVER_IP:4000" -l ":8388" -ser http
+
+# Application:
+curl -v -x "http://127.0.0.1:8388" http://google.com
+```
+
 ----
 
 # <img src="logo.png" alt="kcptun" height="54px" /> 
@@ -112,15 +151,15 @@ All precompiled releases are genereated from `build-release.sh` script.
 #### Usage
 
 ```
-$ ./client_darwin_amd64 -h
+$ ./client_linux_amd64 -h
 NAME:
    kcptun - client(with SMUX)
 
 USAGE:
-   client_darwin_amd64 [global options] command [command options] [arguments...]
+   client_linux_amd64 [global options] command [command options] [arguments...]
 
 VERSION:
-   20180922
+   v2.0.2
 
 COMMANDS:
      help, h  Shows a list of commands or help for one command
@@ -141,8 +180,15 @@ GLOBAL OPTIONS:
    --parityshard value, --ps value  set reed-solomon erasure coding - parityshard (default: 3)
    --dscp value                     set DSCP(6bit) (default: 0)
    --nocomp                         disable compression
-   --sockbuf value                  (default: 4194304)
-   --keepalive value                (default: 10)
+   --sockbuf value                  per-session buffer in bytes (default: 4194304)
+   --streambuf-en                   enable per-socket buffer, use "--streambuf-en=0" to disable
+   --streambuf value                per-socket buffer in bytes (default: 262144)
+   --streamboost value              stream boost for startup in ms, affect tcp slow-start (default: 10000)
+   --maxframe value                 max smux frame size in bytes (default: 32767)
+   --pipebuf value                  internal io.CopyBuffer buffer size in bytes (default: 262144)
+   --keepalive value                (deprecated) seconds between heartbeats (default: 10)
+   --keepalivems value              milliseconds between heartbeats, will overwrite keepalive (default: 10000)
+   --ser value                      enable built-in service. values: raw (pair: raw), socks5 (pair: fast), http (pair: fast) (default: "raw")
    --snmplog value                  collect snmp to file, aware of timeformat in golang, like: ./snmp-20060102.log
    --snmpperiod value               snmp collect period, in seconds (default: 60)
    --log value                      specify a log file to output, default goes to stderr
@@ -151,15 +197,17 @@ GLOBAL OPTIONS:
    --help, -h                       show help
    --version, -v                    print the version
 
-$ ./server_darwin_amd64 -h
+
+
+$ ./server_linux_amd64 -h
 NAME:
    kcptun - server(with SMUX)
 
 USAGE:
-   server_darwin_amd64 [global options] command [command options] [arguments...]
+   server_linux_amd64 [global options] command [command options] [arguments...]
 
 VERSION:
-   20180922
+   v2.0.2
 
 COMMANDS:
      help, h  Shows a list of commands or help for one command
@@ -177,8 +225,16 @@ GLOBAL OPTIONS:
    --parityshard value, --ps value  set reed-solomon erasure coding - parityshard (default: 3)
    --dscp value                     set DSCP(6bit) (default: 0)
    --nocomp                         disable compression
-   --sockbuf value                  (default: 4194304)
-   --keepalive value                (default: 10)
+   --sockbuf value                  per-session buffer in bytes (default: 4194304)
+   --streambuf-en                   enable per-socket buffer, use "--streambuf-en=0" to disable
+   --streambuf value                per-socket buffer in bytes (default: 262144)
+   --streamboost value              stream boost for startup in ms, affect tcp slow-start (default: 10000)
+   --maxframe value                 max smux frame size in bytes (default: 32767)
+   --pipebuf value                  internal io.CopyBuffer buffer size in bytes (default: 262144)
+   --keepalive value                (deprecated) seconds between heartbeats (default: 10)
+   --keepalivems value              milliseconds between heartbeats, will overwrite keepalive (default: 10000)
+   --dns value                      failback DNS for case that can't parse "/etc/resolv.conf", eg: run on Android; split multi-address by ',', eg: "8.8.8.8:53,8.8.4.4:53"
+   --ser value                      enable built-in service, values: raw (pair: raw), fast (socks5-mod-reduce-1-RTT, pair: socks5, http) (default: "raw")
    --snmplog value                  collect snmp to file, aware of timeformat in golang, like: ./snmp-20060102.log
    --snmpperiod value               snmp collect period, in seconds (default: 60)
    --pprof                          start profiling server on :6060
@@ -187,6 +243,7 @@ GLOBAL OPTIONS:
    -c value                         config from json file, which will override the command from shell
    --help, -h                       show help
    --version, -v                    print the version
+
 ```
 
 #### Forward Error Correction

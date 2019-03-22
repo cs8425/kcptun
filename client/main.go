@@ -179,9 +179,9 @@ func main() {
 			Value: 4 * 1024 * 1024, // socket buffer size in bytes
 			Usage: "per-session buffer in bytes",
 		},
-		cli.BoolFlag{
+		cli.BoolTFlag{
 			Name:  "streambuf-en", // enable stream buffer control
-			Usage: "enable per-socket buffer",
+			Usage: `enable per-socket buffer, use "--streambuf-en=0" to disable`,
 		},
 		cli.IntFlag{
 			Name:  "streambuf",
@@ -206,7 +206,7 @@ func main() {
 		cli.IntFlag{
 			Name:  "keepalive",
 			Value: 10, // nat keepalive interval in seconds
-			Usage: "seconds between heartbeats (deprecated)",
+			Usage: "(deprecated) seconds between heartbeats",
 		},
 		cli.IntFlag{
 			Name:  "keepalivems",

@@ -20,7 +20,7 @@ import (
 	"github.com/golang/snappy"
 	"github.com/urfave/cli"
 	kcp "github.com/xtaci/kcp-go"
-	"github.com/xtaci/smux"
+	"github.com/cs8425/smux"
 )
 
 var (

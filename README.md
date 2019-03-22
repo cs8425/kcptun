@@ -1,3 +1,12 @@
+# kcptunB
+
+kcptunB, **B** is for Breaking fixes/features.
+
+The different between original is that kcptunB **include the fixes and features that could NEVER be solved without breaking changes!!**
+And add some features that may never be merge.
+
+----
+
 # <img src="logo.png" alt="kcptun" height="54px" /> 
 
 [![Release][13]][14] [![Powered][17]][18] [![MIT licensed][11]][12] [![Build Status][3]][4] [![Go Report Card][5]][6] [![Downloads][15]][16] [![Docker][1]][2]

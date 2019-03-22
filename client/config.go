@@ -27,12 +27,20 @@ type Config struct {
 	Interval     int    `json:"interval"`
 	Resend       int    `json:"resend"`
 	NoCongestion int    `json:"nc"`
-	SockBuf      int    `json:"sockbuf"`
-	KeepAlive    int    `json:"keepalive"`
 	Log          string `json:"log"`
 	SnmpLog      string `json:"snmplog"`
 	SnmpPeriod   int    `json:"snmpperiod"`
 	Quiet        bool   `json:"quiet"`
+
+	// smux setting
+	KeepAlive    int    `json:"keepalive"`
+	KeepAliveMS  int    `json:"keepalivems"`
+	SockBuf      int    `json:"sockbuf"`
+	StreamBuf    int    `json:"streambuf"`
+	StreamBufEn  bool   `json:"streambuf-en"`
+	BoostTimeout int    `json:"boosttimeout"`
+	MaxFrameSize int    `json:"maxframe"`
+	PipeBuf      int    `json:"pipebuf"`
 }
 
 func parseJSONConfig(config *Config, path string) error {

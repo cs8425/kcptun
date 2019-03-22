@@ -57,7 +57,7 @@ func newCompStream(conn net.Conn) *compStream {
 	return c
 }
 
-func handleClient(sess *smux.Session, p1 io.ReadWriteCloser, quiet bool) {
+func handleClient(sess *smux.Session, p1 io.ReadWriteCloser, quiet bool, buffersize int) {
 	if !quiet {
 		log.Println("stream opened")
 		defer log.Println("stream closed")
@@ -72,11 +72,11 @@ func handleClient(sess *smux.Session, p1 io.ReadWriteCloser, quiet bool) {
 
 	// start tunnel
 	p1die := make(chan struct{})
-	buf1 := make([]byte, 65535)
+	buf1 := make([]byte, buffersize)
 	go func() { io.CopyBuffer(p1, p2, buf1); close(p1die) }()
 
 	p2die := make(chan struct{})
-	buf2 := make([]byte, 65535)
+	buf2 := make([]byte, buffersize)
 	go func() { io.CopyBuffer(p2, p1, buf2); close(p2die) }()
 
 	// wait for tunnel termination
@@ -206,13 +206,42 @@ func main() {
 		},
 		cli.IntFlag{
 			Name:  "sockbuf",
-			Value: 4194304, // socket buffer size in bytes
+			Value: 4 * 1024 * 1024, // socket buffer size in bytes
+			Usage: "per-session buffer in bytes",
+		},
+		cli.BoolFlag{
+			Name:  "streambuf-en", // enable stream buffer control
+			Usage: "enable per-socket buffer",
+		},
+		cli.IntFlag{
+			Name:  "streambuf",
+			Value: 256 * 1024, // each stream buffer max size in bytes
 			Usage: "per-socket buffer in bytes",
+		},
+		cli.IntFlag{
+			Name:  "streamboost",
+			Value: 10 * 1000, // stream boost for startup in ms
+			Usage: "stream boost for startup in ms, affect tcp slow-start",
+		},
+		cli.IntFlag{
+			Name:  "maxframe",
+			Value: 32767, // size in bytes
+			Usage: "max smux frame size in bytes",
+		},
+		cli.IntFlag{
+			Name:  "pipebuf",
+			Value: 256 * 1024, // size in bytes
+			Usage: "internal io.CopyBuffer buffer size in bytes",
 		},
 		cli.IntFlag{
 			Name:  "keepalive",
 			Value: 10, // nat keepalive interval in seconds
-			Usage: "seconds between heartbeats",
+			Usage: "seconds between heartbeats (deprecated)",
+		},
+		cli.IntFlag{
+			Name:  "keepalivems",
+			Value: 10 * 1000, // nat keepalive interval in Milliseconds
+			Usage: "milliseconds between heartbeats, will overwrite keepalive",
 		},
 		cli.StringFlag{
 			Name:  "snmplog",
@@ -261,12 +290,20 @@ func main() {
 		config.Interval = c.Int("interval")
 		config.Resend = c.Int("resend")
 		config.NoCongestion = c.Int("nc")
-		config.SockBuf = c.Int("sockbuf")
-		config.KeepAlive = c.Int("keepalive")
 		config.Log = c.String("log")
 		config.SnmpLog = c.String("snmplog")
 		config.SnmpPeriod = c.Int("snmpperiod")
 		config.Quiet = c.Bool("quiet")
+
+		// smux setting
+		config.SockBuf = c.Int("sockbuf")
+		config.StreamBuf = c.Int("streambuf")
+		config.StreamBufEn = c.Bool("streambuf-en")
+		config.BoostTimeout = c.Int("boosttimeout")
+		config.MaxFrameSize = c.Int("maxframe")
+		config.PipeBuf = c.Int("pipebuf")
+		config.KeepAlive = c.Int("keepalive")
+		config.KeepAliveMS = c.Int("keepalivems")
 
 		if c.String("c") != "" {
 			err := parseJSONConfig(&config, c.String("c"))
@@ -331,6 +368,10 @@ func main() {
 			block, _ = kcp.NewAESBlockCrypt(pass)
 		}
 
+		if config.KeepAliveMS == 0 {
+			config.KeepAliveMS = config.KeepAlive * 1000
+		}
+
 		log.Println("listening on:", listener.Addr())
 		log.Println("encryption:", config.Crypt)
 		log.Println("nodelay parameters:", config.NoDelay, config.Interval, config.Resend, config.NoCongestion)
@@ -341,8 +382,6 @@ func main() {
 		log.Println("datashard:", config.DataShard, "parityshard:", config.ParityShard)
 		log.Println("acknodelay:", config.AckNodelay)
 		log.Println("dscp:", config.DSCP)
-		log.Println("sockbuf:", config.SockBuf)
-		log.Println("keepalive:", config.KeepAlive)
 		log.Println("conn:", config.Conn)
 		log.Println("autoexpire:", config.AutoExpire)
 		log.Println("scavengettl:", config.ScavengeTTL)
@@ -350,9 +389,22 @@ func main() {
 		log.Println("snmpperiod:", config.SnmpPeriod)
 		log.Println("quiet:", config.Quiet)
 
+		log.Println("keepaliveMS:", config.KeepAliveMS)
+		log.Println("sockbuf:", config.SockBuf)
+		log.Println("streambuf-en:", config.StreamBufEn)
+		log.Println("streambuf:", config.StreamBuf)
+		log.Println("boosttimeout:", config.BoostTimeout)
+		log.Println("maxframe:", config.MaxFrameSize)
+		log.Println("pipebuf:", config.PipeBuf)
+
+
 		smuxConfig := smux.DefaultConfig()
 		smuxConfig.MaxReceiveBuffer = config.SockBuf
-		smuxConfig.KeepAliveInterval = time.Duration(config.KeepAlive) * time.Second
+		smuxConfig.KeepAliveInterval = time.Duration(config.KeepAliveMS) * time.Millisecond
+		smuxConfig.MaxFrameSize = config.MaxFrameSize
+		smuxConfig.MaxStreamBuffer = config.StreamBuf
+		smuxConfig.EnableStreamBuffer = config.StreamBufEn
+		smuxConfig.BoostTimeout = time.Duration(config.BoostTimeout) * time.Millisecond
 
 		createConn := func() (*smux.Session, error) {
 			kcpconn, err := kcp.DialWithOptions(config.RemoteAddr, block, config.DataShard, config.ParityShard)
@@ -432,7 +484,7 @@ func main() {
 				muxes[idx].ttl = time.Now().Add(time.Duration(config.AutoExpire) * time.Second)
 			}
 
-			go handleClient(muxes[idx].session, p1, config.Quiet)
+			go handleClient(muxes[idx].session, p1, config.Quiet, config.PipeBuf)
 			rr++
 		}
 	}

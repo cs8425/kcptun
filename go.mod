@@ -1,4 +1,4 @@
-module github.com/xtaci/kcptun
+module github.com/cs8425/kcptunB
 
 require (
 	github.com/cs8425/smux v2.0.0+incompatible

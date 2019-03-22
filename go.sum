@@ -1,3 +1,5 @@
+github.com/cs8425/kcptunB v0.0.0-20170426031648-25bad3c03cf5 h1:ELNBaoUZgV1cDKdiiTmuXdjjvYjrOUMxt8gCj/GNk+8=
+github.com/cs8425/kcptunB v0.0.0-20170426031648-25bad3c03cf5/go.mod h1:8WjlJRaM5EM5p4Ke58WHSI6Qga4wEaishWiDBPbhd84=
 github.com/cs8425/smux v2.0.0+incompatible h1:QUahrZWQMMZLB+zVgr/N1QbpHq8iJe2JXlehiBQLk+w=
 github.com/cs8425/smux v2.0.0+incompatible/go.mod h1:Cc2CPCRECAz4mDfIUfWGHKbFkGMhJjlYf+2OmRXo5bg=
 github.com/golang/snappy v0.0.1 h1:Qgr9rKW7uDUkrbSmQeiDsGa8SjGyCOGtuasMWwvp2P4=

@@ -4,7 +4,6 @@ import (
 	"crypto/sha1"
 	"encoding/csv"
 	"fmt"
-	"io"
 	"log"
 	"math/rand"
 	"net"
@@ -55,35 +54,6 @@ func newCompStream(conn net.Conn) *compStream {
 	c.w = snappy.NewBufferedWriter(conn)
 	c.r = snappy.NewReader(conn)
 	return c
-}
-
-func handleClient(sess *smux.Session, p1 io.ReadWriteCloser, quiet bool, buffersize int) {
-	if !quiet {
-		log.Println("stream opened")
-		defer log.Println("stream closed")
-	}
-
-	defer p1.Close()
-	p2, err := sess.OpenStream()
-	if err != nil {
-		return
-	}
-	defer p2.Close()
-
-	// start tunnel
-	p1die := make(chan struct{})
-	buf1 := make([]byte, buffersize)
-	go func() { io.CopyBuffer(p1, p2, buf1); close(p1die) }()
-
-	p2die := make(chan struct{})
-	buf2 := make([]byte, buffersize)
-	go func() { io.CopyBuffer(p2, p1, buf2); close(p2die) }()
-
-	// wait for tunnel termination
-	select {
-	case <-p1die:
-	case <-p2die:
-	}
 }
 
 func checkError(err error) {
@@ -244,6 +214,11 @@ func main() {
 			Usage: "milliseconds between heartbeats, will overwrite keepalive",
 		},
 		cli.StringFlag{
+			Name:  "ser",
+			Value: "raw",
+			Usage: `enable built-in service. values: raw (pair: raw), socks5 (pair: fast), http (pair: fast)`,
+		},
+		cli.StringFlag{
 			Name:  "snmplog",
 			Value: "",
 			Usage: "collect snmp to file, aware of timeformat in golang, like: ./snmp-20060102.log",
@@ -304,6 +279,9 @@ func main() {
 		config.PipeBuf = c.Int("pipebuf")
 		config.KeepAlive = c.Int("keepalive")
 		config.KeepAliveMS = c.Int("keepalivems")
+
+		// extra
+		config.Service = c.String("ser")
 
 		if c.String("c") != "" {
 			err := parseJSONConfig(&config, c.String("c"))
@@ -397,6 +375,8 @@ func main() {
 		log.Println("maxframe:", config.MaxFrameSize)
 		log.Println("pipebuf:", config.PipeBuf)
 
+		log.Println("service:", config.Service)
+
 
 		smuxConfig := smux.DefaultConfig()
 		smuxConfig.MaxReceiveBuffer = config.SockBuf
@@ -484,7 +464,7 @@ func main() {
 				muxes[idx].ttl = time.Now().Add(time.Duration(config.AutoExpire) * time.Second)
 			}
 
-			go handleClient(muxes[idx].session, p1, config.Quiet, config.PipeBuf)
+			go handleClient(muxes[idx].session, p1, config.Quiet, config.PipeBuf, config.Service)
 			rr++
 		}
 	}

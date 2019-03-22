@@ -39,6 +39,10 @@ type Config struct {
 	BoostTimeout int    `json:"boosttimeout"`
 	MaxFrameSize int    `json:"maxframe"`
 	PipeBuf      int    `json:"pipebuf"`
+
+	// extra
+	DNS          []string `json:"dns"`
+	Service      string   `json:"ser"`
 }
 
 func parseJSONConfig(config *Config, path string) error {

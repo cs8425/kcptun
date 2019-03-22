@@ -12,6 +12,8 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"time"
+	"strings"
+	_ "unsafe"
 
 	"golang.org/x/crypto/pbkdf2"
 
@@ -58,6 +60,15 @@ func newCompStream(conn net.Conn) *compStream {
 	return c
 }
 
+// DNS resolve workaround for android in pure go
+
+//go:linkname defaultNS net.defaultNS
+var defaultNS []string
+
+func setDefaultNS(addrs []string) {
+	defaultNS = addrs
+}
+
 // handle multiplex-ed connection
 func handleMux(conn io.ReadWriteCloser, config *Config) {
 	// stream multiplex
@@ -82,37 +93,8 @@ func handleMux(conn io.ReadWriteCloser, config *Config) {
 			log.Println(err)
 			return
 		}
-		p2, err := net.DialTimeout("tcp", config.Target, 5*time.Second)
-		if err != nil {
-			p1.Close()
-			log.Println(err)
-			continue
-		}
-		go handleClient(p1, p2, config.Quiet, config.PipeBuf)
-	}
-}
 
-func handleClient(p1, p2 io.ReadWriteCloser, quiet bool, buffersize int) {
-	if !quiet {
-		log.Println("stream opened")
-		defer log.Println("stream closed")
-	}
-	defer p1.Close()
-	defer p2.Close()
-
-	// start tunnel
-	p1die := make(chan struct{})
-	buf1 := make([]byte, buffersize)
-	go func() { io.CopyBuffer(p1, p2, buf1); close(p1die) }()
-
-	p2die := make(chan struct{})
-	buf2 := make([]byte, buffersize)
-	go func() { io.CopyBuffer(p2, p1, buf2); close(p2die) }()
-
-	// wait for tunnel termination
-	select {
-	case <-p1die:
-	case <-p2die:
+		go handleClient(p1, config.Quiet, config.PipeBuf, config.Service, config.Target)
 	}
 }
 
@@ -259,6 +241,16 @@ func main() {
 			Usage: "milliseconds between heartbeats, will overwrite keepalive",
 		},
 		cli.StringFlag{
+			Name:  "dns",
+			Value: "",
+			Usage: `failback DNS for case that can't parse "/etc/resolv.conf", eg: run on Android; split multi-address by ',', eg: "8.8.8.8:53,8.8.4.4:53"`,
+		},
+		cli.StringFlag{
+			Name:  "ser",
+			Value: "raw",
+			Usage: `enable built-in service, values: raw (pair: raw), fast (socks5-mod-reduce-1-RTT, pair: socks5, http)`,
+		},
+		cli.StringFlag{
 			Name:  "snmplog",
 			Value: "",
 			Usage: "collect snmp to file, aware of timeformat in golang, like: ./snmp-20060102.log",
@@ -321,6 +313,17 @@ func main() {
 		config.PipeBuf = c.Int("pipebuf")
 		config.KeepAlive = c.Int("keepalive")
 		config.KeepAliveMS = c.Int("keepalivems")
+
+		// extra
+		config.Service = c.String("ser")
+
+		if c.String("dns") != "" {
+			dnsaddr := strings.Split(c.String("dns"), ",")
+			if len(dnsaddr) > 0 {
+				config.DNS = dnsaddr
+			}
+		}
+
 
 		if c.String("c") != "" {
 			//Now only support json config file
@@ -410,6 +413,13 @@ func main() {
 		log.Println("boosttimeout:", config.BoostTimeout)
 		log.Println("maxframe:", config.MaxFrameSize)
 		log.Println("pipebuf:", config.PipeBuf)
+
+		log.Println("service:", config.Service)
+
+		if len(config.DNS) > 0 {
+			log.Println("failback-DNS:", config.DNS)
+			setDefaultNS(config.DNS)
+		}
 
 		if err := lis.SetDSCP(config.DSCP); err != nil {
 			log.Println("SetDSCP:", err)

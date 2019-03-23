@@ -5,6 +5,21 @@ kcptunB, **B** is for Breaking fixes/features.
 The different between original is that kcptunB **include the fixes and features that could NEVER be solved without breaking changes!!**
 And add some features that may never be merge.
 
+#### Config changes
+
+* keepalive:
+  * `--keepalive`: **deprecated**, use `--keepalivems` instead
+  * `--keepalivems`: replace `--keepalive`, but unit is milliseconds
+  * `--keepalive-timeout`: timeout for heartbeat response, in milliseconds
+  * `--keepalivems` can and **usually bigger** than `--keepalive-timeout`
+* stream buffer:
+  * `--streambuf-en`: enable per-socket buffer by default, use "--streambuf-en=0" to __disable all breaking fixes/features__
+  * `--streambuf`: per-socket buffer size
+  * `--streamboost`: boost for startup in milliseconds, affect tcp slow-start
+* built-in proxy: `--ser`
+  * see [Usage of built-in proxy](#usage-of-built-in-proxy)
+
+
 #### Usage of built-in proxy
 
 * server side, `-ser` values:
@@ -159,7 +174,7 @@ USAGE:
    client_linux_amd64 [global options] command [command options] [arguments...]
 
 VERSION:
-   v2.0.2
+   v2.0.3
 
 COMMANDS:
      help, h  Shows a list of commands or help for one command
@@ -188,6 +203,7 @@ GLOBAL OPTIONS:
    --pipebuf value                  internal io.CopyBuffer buffer size in bytes (default: 262144)
    --keepalive value                (deprecated) seconds between heartbeats (default: 10)
    --keepalivems value              milliseconds between heartbeats, will overwrite keepalive (default: 10000)
+   --keepalive-timeout value        timeout in milliseconds for heartbeats response (default: 75000)
    --ser value                      enable built-in service. values: raw (pair: raw), socks5 (pair: fast), http (pair: fast) (default: "raw")
    --snmplog value                  collect snmp to file, aware of timeformat in golang, like: ./snmp-20060102.log
    --snmpperiod value               snmp collect period, in seconds (default: 60)
@@ -207,7 +223,7 @@ USAGE:
    server_linux_amd64 [global options] command [command options] [arguments...]
 
 VERSION:
-   v2.0.2
+   v2.0.3
 
 COMMANDS:
      help, h  Shows a list of commands or help for one command
@@ -233,6 +249,7 @@ GLOBAL OPTIONS:
    --pipebuf value                  internal io.CopyBuffer buffer size in bytes (default: 262144)
    --keepalive value                (deprecated) seconds between heartbeats (default: 10)
    --keepalivems value              milliseconds between heartbeats, will overwrite keepalive (default: 10000)
+   --keepalive-timeout value        timeout in milliseconds for heartbeats response (default: 75000)
    --dns value                      failback DNS for case that can't parse "/etc/resolv.conf", eg: run on Android; split multi-address by ',', eg: "8.8.8.8:53,8.8.4.4:53"
    --ser value                      enable built-in service, values: raw (pair: raw), fast (socks5-mod-reduce-1-RTT, pair: socks5, http) (default: "raw")
    --snmplog value                  collect snmp to file, aware of timeformat in golang, like: ./snmp-20060102.log

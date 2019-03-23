@@ -213,6 +213,11 @@ func main() {
 			Value: 10 * 1000, // nat keepalive interval in Milliseconds
 			Usage: "milliseconds between heartbeats, will overwrite keepalive",
 		},
+		cli.IntFlag{
+			Name:  "keepalive-timeout",
+			Value: 75000, // nat keepalive timeout in Milliseconds
+			Usage: "timeout in milliseconds for heartbeats response",
+		},
 		cli.StringFlag{
 			Name:  "ser",
 			Value: "raw",
@@ -279,6 +284,7 @@ func main() {
 		config.PipeBuf = c.Int("pipebuf")
 		config.KeepAlive = c.Int("keepalive")
 		config.KeepAliveMS = c.Int("keepalivems")
+		config.KeepAliveTimeout = c.Int("keepalive-timeout")
 
 		// extra
 		config.Service = c.String("ser")
@@ -368,6 +374,7 @@ func main() {
 		log.Println("quiet:", config.Quiet)
 
 		log.Println("keepaliveMS:", config.KeepAliveMS)
+		log.Println("keepalive-timeout:", config.KeepAliveTimeout)
 		log.Println("sockbuf:", config.SockBuf)
 		log.Println("streambuf-en:", config.StreamBufEn)
 		log.Println("streambuf:", config.StreamBuf)
@@ -381,6 +388,7 @@ func main() {
 		smuxConfig := smux.DefaultConfig()
 		smuxConfig.MaxReceiveBuffer = config.SockBuf
 		smuxConfig.KeepAliveInterval = time.Duration(config.KeepAliveMS) * time.Millisecond
+		smuxConfig.KeepAliveTimeout = time.Duration(config.KeepAliveTimeout) * time.Millisecond
 		smuxConfig.MaxFrameSize = config.MaxFrameSize
 		smuxConfig.MaxStreamBuffer = config.StreamBuf
 		smuxConfig.EnableStreamBuffer = config.StreamBufEn

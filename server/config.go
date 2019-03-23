@@ -31,18 +31,19 @@ type Config struct {
 	Quiet        bool   `json:"quiet"`
 
 	// smux setting
-	KeepAlive    int    `json:"keepalive"`
-	KeepAliveMS  int    `json:"keepalivems"`
-	SockBuf      int    `json:"sockbuf"`
-	StreamBuf    int    `json:"streambuf"`
-	StreamBufEn  bool   `json:"streambuf-en"`
-	BoostTimeout int    `json:"boosttimeout"`
-	MaxFrameSize int    `json:"maxframe"`
-	PipeBuf      int    `json:"pipebuf"`
+	KeepAlive         int    `json:"keepalive"`
+	KeepAliveMS       int    `json:"keepalivems"`
+	KeepAliveTimeout  int    `json:"keepalive-timeout"`
+	SockBuf           int    `json:"sockbuf"`
+	StreamBuf         int    `json:"streambuf"`
+	StreamBufEn       bool   `json:"streambuf-en"`
+	BoostTimeout      int    `json:"boosttimeout"`
+	MaxFrameSize      int    `json:"maxframe"`
+	PipeBuf           int    `json:"pipebuf"`
 
 	// extra
-	DNS          []string `json:"dns"`
-	Service      string   `json:"ser"`
+	DNS               []string `json:"dns"`
+	Service           string   `json:"ser"`
 }
 
 func parseJSONConfig(config *Config, path string) error {

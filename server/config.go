@@ -44,6 +44,7 @@ type Config struct {
 	// extra
 	DNS               []string `json:"dns"`
 	Service           string   `json:"ser"`
+	TFO               bool     `json:"tfo"`
 }
 
 func parseJSONConfig(config *Config, path string) error {

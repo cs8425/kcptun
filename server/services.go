@@ -13,7 +13,7 @@ func replyAndClose(p1 net.Conn, rpy int) {
 	p1.Close()
 }
 
-func handleFast(p1 net.Conn, quiet bool, buffersize int) {
+func handleFast(p1 net.Conn, quiet bool, buffersize int, tfo bool) {
 	var b [320]byte
 	n, err := p1.Read(b[:])
 	if err != nil {
@@ -40,8 +40,16 @@ func handleFast(p1 net.Conn, quiet bool, buffersize int) {
 	port = strconv.Itoa(int(b[n-2])<<8 | int(b[n-1]))
 	backend = net.JoinHostPort(host, port)
 
+
 CONN:
-	p2, err := net.DialTimeout("tcp", backend, 10*time.Second)
+	var p2 net.Conn
+	if tfo {
+		p2, err = handleTFO(p1, backend)
+
+	} else {
+		p2, err = net.DialTimeout("tcp", backend, 5 * time.Second)
+	}
+	//p2, err := net.DialTimeout("tcp", backend, 10*time.Second)
 	if err != nil {
 		Vlogln(quiet, "[err]", backend, err)
 
@@ -74,7 +82,24 @@ CONN:
 	Vlogln(quiet, "[cls]", backend)
 }
 
-func handleClient(p1 net.Conn, quiet bool, buffersize int, serv string, target string) {
+func handleTFO(p1 net.Conn, target string) (net.Conn, error) {
+	buf := make([]byte, 4096)
+	p1.SetReadDeadline(time.Now().Add(10 * time.Millisecond))
+	n, err := p1.Read(buf) // try read first packet data
+	if err, ok := err.(net.Error); ok && err.Timeout() { // read data timeout
+		p1.SetReadDeadline(time.Time{})
+		return net.DialTimeout("tcp", target, 5 * time.Second)
+		//return DialTFO(target, buf[:n])
+	}
+	if err != nil {
+		return nil, err
+	}
+	p1.SetReadDeadline(time.Time{})
+
+	return DialTFO(target, buf[:n])
+}
+
+func handleClient(p1 net.Conn, quiet bool, buffersize int, serv string, target string, tfo bool) {
 	if !quiet {
 		log.Println("stream opened")
 		defer log.Println("stream closed")
@@ -85,7 +110,14 @@ func handleClient(p1 net.Conn, quiet bool, buffersize int, serv string, target s
 	default:
 		fallthrough
 	case "raw":
-		p2, err := net.DialTimeout("tcp", target, 5 * time.Second)
+
+		var p2 net.Conn
+		var err error
+		if tfo {
+			p2, err = handleTFO(p1, target)
+		} else {
+			p2, err = net.DialTimeout("tcp", target, 5 * time.Second)
+		}
 		if err != nil {
 			Vlogln(quiet, "[connect err]", target, err)
 			return
@@ -94,7 +126,7 @@ func handleClient(p1 net.Conn, quiet bool, buffersize int, serv string, target s
 		cp(p1, p2, buffersize)
 
 	case "fast":
-		handleFast(p1, quiet, buffersize)
+		handleFast(p1, quiet, buffersize, tfo)
 	}
 
 }

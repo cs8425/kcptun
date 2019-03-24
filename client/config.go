@@ -44,7 +44,8 @@ type Config struct {
 	PipeBuf           int    `json:"pipebuf"`
 
 	// extra
-	Service           string   `json:"ser"`
+	Service           string `json:"ser"`
+	TFO               bool   `json:"tfo"`
 }
 
 func parseJSONConfig(config *Config, path string) error {

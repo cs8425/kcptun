@@ -95,7 +95,7 @@ func handleMux(conn io.ReadWriteCloser, config *Config) {
 			return
 		}
 
-		go handleClient(p1, config.Quiet, config.PipeBuf, config.Service, config.Target)
+		go handleClient(p1, config.Quiet, config.PipeBuf, config.Service, config.Target, config.TFO)
 	}
 }
 
@@ -256,6 +256,10 @@ func main() {
 			Value: "raw",
 			Usage: `enable built-in service, values: raw (pair: raw), fast (socks5-mod-reduce-1-RTT, pair: socks5, http)`,
 		},
+		cli.BoolTFlag{
+			Name:  "tfo",
+			Usage: `enable TCP fast open, use "--tfo=0" to disable`,
+		},
 		cli.StringFlag{
 			Name:  "snmplog",
 			Value: "",
@@ -323,6 +327,7 @@ func main() {
 
 		// extra
 		config.Service = c.String("ser")
+		config.TFO = c.Bool("tfo")
 
 		if c.String("dns") != "" {
 			dnsaddr := strings.Split(c.String("dns"), ",")
@@ -423,6 +428,7 @@ func main() {
 		log.Println("pipebuf:", config.PipeBuf)
 
 		log.Println("service:", config.Service)
+		log.Println("TCP Fast Open(tfo):", config.TFO)
 
 		if len(config.DNS) > 0 {
 			log.Println("failback-DNS:", config.DNS)

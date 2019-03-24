@@ -223,6 +223,10 @@ func main() {
 			Value: "raw",
 			Usage: `enable built-in service. values: raw (pair: raw), socks5 (pair: fast), http (pair: fast)`,
 		},
+		cli.BoolTFlag{
+			Name:  "tfo",
+			Usage: `enable TCP fast open, use "--tfo=0" to disable`,
+		},
 		cli.StringFlag{
 			Name:  "snmplog",
 			Value: "",
@@ -288,6 +292,7 @@ func main() {
 
 		// extra
 		config.Service = c.String("ser")
+		config.TFO = c.Bool("tfo")
 
 		if c.String("c") != "" {
 			err := parseJSONConfig(&config, c.String("c"))
@@ -318,6 +323,10 @@ func main() {
 		checkError(err)
 		listener, err := net.ListenTCP("tcp", addr)
 		checkError(err)
+
+		if config.TFO {
+			bindTFO(listener)
+		}
 
 		log.Println("initiating key derivation")
 		pass := pbkdf2.Key([]byte(config.Key), []byte(SALT), 4096, 32, sha1.New)
@@ -383,6 +392,7 @@ func main() {
 		log.Println("pipebuf:", config.PipeBuf)
 
 		log.Println("service:", config.Service)
+		log.Println("TCP Fast Open(tfo):", config.TFO)
 
 
 		smuxConfig := smux.DefaultConfig()

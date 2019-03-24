@@ -44,7 +44,7 @@ func handleFast(p1 net.Conn, quiet bool, buffersize int, tfo bool) {
 CONN:
 	var p2 net.Conn
 	if tfo {
-		p2, err = getTFODialer(5 * time.Second).Dial("tcp", backend)
+		p2, err = handleTFO(p1, backend, 5 * time.Second)
 	} else {
 		p2, err = net.DialTimeout("tcp", backend, 5 * time.Second)
 	}
@@ -95,7 +95,7 @@ func handleClient(p1 net.Conn, quiet bool, buffersize int, serv string, target s
 		var p2 net.Conn
 		var err error
 		if tfo {
-			p2, err = getTFODialer(5 * time.Second).Dial("tcp", target)
+			p2, err = handleTFO(p1, target, 5 * time.Second)
 		} else {
 			p2, err = net.DialTimeout("tcp", target, 5 * time.Second)
 		}

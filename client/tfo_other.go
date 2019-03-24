@@ -9,11 +9,11 @@ import (
 
 func bindTFO(listener *net.TCPListener) { }
 
-func getTFODialer(timeout time.Duration) *net.Dialer {
+func handleTFO(p1 net.Conn, target string, timeout time.Duration) (net.Conn, error) {
 	dialer := &net.Dialer{}
 	if timeout != 0 {
 		dialer.Timeout = timeout
 	}
-	return dialer
+	return dialer.Dial("tcp", target)
 }
 

@@ -33,3 +33,7 @@ func getTFODialer(timeout time.Duration) *net.Dialer {
 	return dialer
 }
 
+func handleTFO(p1 net.Conn, target string, timeout time.Duration) (net.Conn, error) {
+	return getTFODialer(timeout).Dial("tcp", target)
+}
+

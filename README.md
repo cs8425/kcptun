@@ -18,7 +18,14 @@ And add some features that may never be merge.
   * `--streamboost`: boost for startup in milliseconds, affect tcp slow-start
 * built-in proxy: `--ser`
   * see [Usage of built-in proxy](#usage-of-built-in-proxy)
-
+* TCP Fast Open
+  * `--tfo`: enable TCP fast open, use "--tfo=0" to disable, **enable by default**
+  * current support & tested: linux (kernel 3.6+ for clients, 3.7+ for servers)
+  * current support but **not tested**: darwin (OS X 10.11+), OpenBSD (10.3+ for servers, 12.0+ for clients)
+  * should support but not implementation yet: windows
+  * not support (yet): Solaris, NetBSD, DragonFly BSD
+  * system config:
+    * linux: `sudo sysctl -w net.ipv4.tcp_fastopen=3` or `echo "3" > /proc/sys/net/ipv4/tcp_fastopen`
 
 #### Usage of built-in proxy
 

@@ -20,12 +20,14 @@ And add some features that may never be merge.
   * see [Usage of built-in proxy](#usage-of-built-in-proxy)
 * TCP Fast Open
   * `--tfo`: enable TCP fast open, use "--tfo=0" to disable, **enable by default**
-  * current support & tested: linux (kernel 3.6+ for clients, 3.7+ for servers)
-  * current support but **not tested**: darwin (OS X 10.11+), OpenBSD (10.3+ for servers, 12.0+ for clients)
+  * current support & tested: linux (kernel 4.11+ for tcp clients, 3.7+ for tcp servers), FreeBSD (10.3+ for tcp servers, 12.0+ for tcp clients)
+  * current support but **not tested**: darwin (OS X 10.11+)
   * should support but not implementation yet: windows
-  * not support (yet): Solaris, NetBSD, DragonFly BSD
+  * not support (yet): Solaris, OpenBSD, NetBSD, DragonFly BSD
+  * `tcp server side` is kcptun client, `tcp client side` is kcptun server
   * system config:
     * linux: `sudo sysctl -w net.ipv4.tcp_fastopen=3` or `echo "3" > /proc/sys/net/ipv4/tcp_fastopen`
+    * FreeBSD: `sysctl -w net.inet.tcp.fastopen.server_enable=1`, `sysctl -w net.inet.tcp.fastopen.client_enable=1`
 
 #### Usage of built-in proxy
 
